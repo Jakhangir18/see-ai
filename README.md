@@ -1,80 +1,73 @@
-# SeeAI — Real-time Object Detection in the Browser
+# SeeAI: object detection in the browser
 
-Real-time object detection running entirely in the browser, powered by **YOLOv8** and **ONNX Runtime Web**. No server needed — inference happens locally on your device.
+Real-time object detection on a webcam feed, running entirely in the browser with **YOLOv8n** and **ONNX Runtime Web**. There is no server: the model is downloaded once and inference runs on the device.
 
-## ✨ Features
+## Features
 
-- Live webcam object detection with YOLOv8n
-- Runs 100% client-side via ONNX Runtime (WebAssembly + WebGPU)
-- Cinematic Minecraft-inspired voxel world UI (CommitWeather integration)
-- Built with React 18, TypeScript, Vite, and Tailwind CSS
+- Live webcam detection of the 80 COCO classes with YOLOv8n
+- Inference on the CPU through ONNX Runtime Web's WebAssembly backend
+- Boxes and labels drawn over the video on a canvas
+- A heads-up display around the feed: FPS, inference time and its recent history, per-class detection counts, a radar view of where objects are in the frame, resolution and model info, and an event log
+- Model download progress shown while loading
 
-## 🚀 Getting Started
+## How it works
 
-### Prerequisites
+The pipeline is in `src/utils/` and the loop in `src/pages/Index.tsx`.
 
-- [Node.js](https://nodejs.org/) v18 or higher
-- [npm](https://www.npmjs.com/) v9 or higher (comes with Node.js)
+1. **Load.** `loadModel()` streams `public/yolov8n.onnx` (about 12 MB) with progress reporting and creates an ONNX Runtime session on the `wasm` execution provider.
+2. **Capture.** The camera stream (640 x 480 requested) plays in a `<video>` element; each animation frame is copied to an offscreen canvas.
+3. **Preprocess.** The frame is resized to 640 x 640 and converted to a normalized `float32` tensor in CHW layout, shape `[1, 3, 640, 640]`.
+4. **Infer.** The model returns `[1, 84, 8400]`: 8400 candidate boxes, each with 4 box values and 80 class scores. Candidates below a 0.5 confidence threshold are dropped and boxes are scaled back to the video size.
+5. **Non-maximum suppression.** `nms.ts` keeps the highest-scoring box and drops same-class boxes that overlap it with IoU above 0.45.
+6. **Draw.** `drawDetections.ts` renders the boxes; the HUD components read the same detection list.
 
-### Installation
+## Getting started
+
+Prerequisites: Node.js 18 or later and npm.
 
 ```sh
-# 1. Clone the repository
-git clone https://github.com/Jakhangir18/Project-2.git
-
-# 2. Enter the project directory
-cd Project-2
-
-# 3. Install dependencies
 npm install
-
-# 4. Start the development server
 npm run dev
 ```
 
-Then open [http://localhost:8080](http://localhost:8080) in your browser.
+Open http://localhost:8080 and allow camera access when the browser asks.
 
-> **Note:** The app requires camera access for live detection. Allow the permission prompt when the browser asks.
-
-### Build for Production
+Production build:
 
 ```sh
-npm run build
+npm run build      # output in dist/
+npm run preview    # serve the build locally
 ```
 
-The output will be in the `dist/` folder. You can serve it with any static hosting provider (Vercel, Netlify, GitHub Pages, etc.).
+`dist/` is a static site and can be served by any static host.
 
-```sh
-# Preview the production build locally
-npm run preview
-```
-
-## 🛠 Tech Stack
+## Tech stack
 
 | Tool | Purpose |
 |---|---|
-| [Vite](https://vitejs.dev/) | Build tool & dev server |
-| [React 18](https://react.dev/) | UI framework |
-| [TypeScript](https://www.typescriptlang.org/) | Type safety |
-| [Tailwind CSS](https://tailwindcss.com/) | Styling |
-| [shadcn/ui](https://ui.shadcn.com/) | UI component library |
-| [ONNX Runtime Web](https://onnxruntime.ai/) | In-browser ML inference |
-| [YOLOv8n](https://ultralytics.com/yolov8) | Object detection model |
+| [ONNX Runtime Web](https://onnxruntime.ai/) | In-browser model inference (WebAssembly) |
+| [YOLOv8n](https://docs.ultralytics.com/models/yolov8/) | Object detection model, exported to ONNX |
+| React 18 + TypeScript | UI |
+| Vite 5 | Dev server and build |
+| Tailwind CSS, shadcn/ui | Styling and UI primitives |
+| Framer Motion | HUD animations |
+| Three.js | Shader background on the start screen |
 
-## 📁 Project Structure
+## Project structure
 
 ```
-Project-2/
-├── public/             # Static assets
-├── src/
-│   ├── components/     # Reusable UI components
-│   ├── pages/          # Page-level components
-│   ├── hooks/          # Custom React hooks
-│   └── lib/            # Utility functions
-├── yolov8n.onnx        # ONNX model (YOLOv8 nano)
-├── index.html
-├── vite.config.ts
-└── package.json
+public/
+  yolov8n.onnx            model loaded by the app
+  ort-wasm-*.wasm         ONNX Runtime WebAssembly binaries
+src/
+  pages/Index.tsx         camera, detection loop, layout
+  utils/
+    detector.ts           model loading, preprocessing, inference, output decoding
+    nms.ts                non-maximum suppression
+    drawDetections.ts     box and label rendering
+    cocoClasses.ts        the 80 COCO class names
+  components/hud/         FPS, inference chart, detection breakdown, radar, system metrics, event log, startup sequence
+  components/ui/          shadcn/ui components and visual effects
+index.html
+vite.config.ts
 ```
-
-
